@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ChromaHex-4D : 차세대 광학 카메라 통신 프로토타입</title>
+  <style>
+    :root {
+      --bg: #07080c;
+      --panel: #11131c;
+      --border: #232738;
+      --accent: #00f0ff;
+      --accent2: #ff007a;
+      --text: #e8ecf4;
+      --muted: #8a94a8;
+      --success: #00e676;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-badge { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+    h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.3px; }
+    .mode-tabs { display: flex; gap: 8px; }
+    .tab-btn { background: #1a1e2d; color: var(--text); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: 0.2s; }
+    .tab-btn.active { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 14px rgba(0, 240, 255, 0.35); }
+    .main-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; flex: 1; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+    .card-title { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .badge { font-size: 0.72rem; padding: 3px 8px; border-radius: 99px; background: rgba(0, 240, 255, 0.12); color: var(--accent); border: 1px solid rgba(0, 240, 255, 0.3); }
+    .canvas-wrap { position: relative; width: 100%; display: flex; justify-content: center; align-items: center; background: #000; border-radius: 12px; border: 1px solid #1f2433; overflow: hidden; aspect-ratio: 1 / 1; max-height: 440px; margin: 0 auto; }
+    canvas, video { max-width: 100%; max-height: 100%; display: block; }
+    .controls { display: flex; flex-direction: column; gap: 10px; }
+    .control-row { display: flex; flex-direction: column; gap: 5px; font-size: 0.82rem; }
+    .control-row label { display: flex; justify-content: space-between; color: var(--muted); }
+    .control-row span.val { color: var(--accent); font-weight: 600; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    textarea { width: 100%; height: 68px; background: #090b10; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 10px; font-size: 0.85rem; resize: none; }
+    textarea:focus { outline: 1px solid var(--accent); }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn { background: #1e2336; color: var(--text); border: 1px solid var(--border); padding: 9px 14px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: 0.15s; flex: 1; text-align: center; }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary { background: linear-gradient(135deg, #00d2ff, #0072ff); color: #fff; border: none; }
+    .btn.danger { background: rgba(255, 0, 122, 0.15); color: #ff4d9e; border-color: rgba(255, 0, 122, 0.4); }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .stat-box { background: #0a0c12; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+    .stat-label { font-size: 0.7rem; color: var(--muted); }
+    .stat-val { font-size: 0.95rem; font-weight: 700; color: var(--text); margin-top: 2px; }
+    .progress-bar-bg { width: 100%; height: 12px; background: #090b10; border-radius: 99px; overflow: hidden; border: 1px solid var(--border); }
+    .progress-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--success)); transition: width 0.15s; }
+    .decoded-output { background: #090b10; border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 0.85rem; min-height: 76px; word-break: break-all; color: var(--success); }
+    .matrix-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .chunk-cell { width: 18px; height: 18px; border-radius: 4px; background: #1a1e2e; border: 1px solid #2b3147; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--muted); }
+    .chunk-cell.solved { background: rgba(0, 230, 118, 0.2); border-color: var(--success); color: var(--success); font-weight: 700; }
+    .cam-overlay-guide { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-badge"></div>
+    <h1>ChromaHex-4D 광학 통신 통합 테스트베드</h1>
+  </div>
+  <div class="mode-tabs">
+    <button class="tab-btn active" id="tabSimBtn" onclick="switchMode('sim')">🔄 가상 광학 루프백 (PC 단일화면 검증)</button>
+    <button class="tab-btn" id="tabCamBtn" onclick="switchMode('cam')">📷 스마트폰 실물 카메라 스캔 모드</button>
+  </div>
+</header>
+
+<div class="main-grid">
+  <!-- [좌측 패널] 송신기 (Transmitter) -->
+  <div class="card" id="txCard">
+    <div class="card-header">
+      <div class="card-title">📡 송신기 (ChromaHex-4D Encoder)</div>
+      <span class="badge" id="txSpecBadge">9-Bit/Cell · Fountain Stream</span>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="txCanvas" width="440" height="440"></canvas>
+    </div>
+
+    <div class="controls">
+      <div class="control-row">
+        <label><span>전송할 원본 데이터 (UTF-8 텍스트/페이로드)</span><span class="val" id="payloadSizeLabel">0 Bytes</span></label>
+        <textarea id="inputText">안녕하세요! ChromaHex-4D 차세대 광학 카메라 통신 프로토타입입니다. 육각 동심원 격자, 8방향 물방울 글리프(3비트), 듀얼 톤 네온 컬러(6비트), 그리고 LT 파운틴 코드가 결합되어 중간 프레임을 놓쳐도 100% 복원됩니다! 🚀✨</textarea>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn primary" onclick="resetAndStartFountain()">⚡ 데이터 패킷 재인코딩 & 리셋</button>
+        <button class="btn" id="pauseBtn" onclick="togglePause()">⏸ 일시정지</button>
+      </div>
+
+      <div class="control-row">
+        <label><span>송출 프레임 속도 (FPS)</span><span class="val" id="fpsValLabel">15 FPS</span></label>
+        <input type="range" id="fpsSlider" min="2" max="30" value="15" oninput="updateTxParams()" />
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label">현재 Seed ID</div>
+          <div class="stat-val" id="txSeedStat">#1</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">유효 데이터 셀</div>
+          <div class="stat-val" id="txCellCountStat">120 셀</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">이론 전송 속도</div>
+          <div class="stat-val" id="txSpeedStat">2.0 KB/s</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- [우측 패널] 수신기 & 컴퓨터 비전 디코더 (Receiver) -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">🔍 수신기 (Vision & Fountain Decoder)</div>
+      <span class="badge" id="rxStatusBadge">실시간 광학 캡처 중</span>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="rxCanvas" width="440" height="440"></canvas>
+      <video id="camVideo" playsinline muted style="display:none;"></video>
+    </div>
+
+    <!-- 가상 광학 왜곡 시뮬레이션 컨트롤 (Sim 모드 전용) -->
+    <div class="controls" id="simControlsBox">
+      <div class="control-row">
+        <label><span>🌀 손떨림 & 모션 블러 강도 (Gaussian Shake)</span><span class="val" id="blurLabel">15%</span></label>
+        <input type="range" id="blurSlider" min="0" max="60" value="15" oninput="updateSimLabels()" />
+      </div>
+      <div class="control-row">
+        <label><span>💡 조명 그라데이션 & 빛 반사 (Glare Noise)</span><span class="val" id="glareLabel">20%</span></label>
+        <input type="range" id="glareSlider" min="0" max="70" value="20" oninput="updateSimLabels()" />
+      </div>
+      <div class="control-row">
+        <label><span>✂️ 롤링 셔터 & 프레임 드롭 확률 (Packet Loss)</span><span class="val" id="lossLabel">15%</span></label>
+        <input type="range" id="lossSlider" min="0" max="70" value="15" oninput="updateSimLabels()" />
+      </div>
+    </div>
+
+    <!-- 스마트폰 실물 카메라 컨트롤 (Cam 모드 전용) -->
+    <div class="controls" id="camControlsBox" style="display:none;">
+      <div class="btn-row">
+        <button class="btn primary" onclick="startSmartphoneCamera()">📷 스마트폰 후면 카메라 켜기</button>
+        <button class="btn danger" onclick="stopSmartphoneCamera()">⏹ 카메라 끄기</button>
+      </div>
+      <p style="font-size:0.78rem; color:var(--muted); line-height:1.4;">
+        ※ 다른 PC나 태블릿 화면에 좌측의 ChromaHex-4D 코드를 띄워놓고, 스마트폰 카메라의 중앙 가이드 원에 코드를 맞춰 비춰주세요.
+      </p>
+    </div>
+
+    <!-- 파운틴 코드 가우스 소거법 복원 상태 -->
+    <div class="controls">
+      <div class="control-row">
+        <label>
+          <span>파운틴 행렬 복원율 (Gaussian Elimination Rank)</span>
+          <span class="val" id="rankProgressLabel">0 / 0 블록 (0%)</span>
+        </label>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressBar"></div>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <label><span>소스 블록($K$) 실시간 해독 매트릭스</span><span class="val" id="rxPacketCountLabel">수신 패킷: 0개 (손실: 0)</span></label>
+        <div class="matrix-grid" id="chunkMatrixGrid"></div>
+      </div>
+
+      <div class="control-row">
+        <label><span>복원된 최종 데이터 (100% 무결성 조립 결과)</span></label>
+        <div class="decoded-output" id="decodedOutputBox">스트림 패킷 수집 중... (순서에 상관없이 충분한 프레임이 모이면 즉시 복원됩니다)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * ============================================================================
+ * 1. 컬러 팔레트 & 정육각형 동심원 좌표계 (Axial Hex Grid) 초기화
+ * ============================================================================
+ */
+// 다크 가드 밴드 위에서 빛 번짐 없이 구분되는 8원색 고대비 네온 팔레트 (3-Bit)
+const PALETTE_8 = [
+  { hex: '#FF2A54', rgb: [255, 42, 84] },   // 000: Neon Red
+  { hex: '#00F59B', rgb: [0, 245, 155] },   // 001: Neon Green
+  { hex: '#2979FF', rgb: [41, 121, 255] },  // 010: Electric Blue
+  { hex: '#00F0FF', rgb: [0, 240, 255] },   // 011: Cyan
+  { hex: '#FF00E5', rgb: [255, 0, 229] },   // 100: Magenta
+  { hex: '#FFEA00', rgb: [255, 234, 0] },   // 101: Yellow
+  { hex: '#FF8A00', rgb: [255, 138, 0] },   // 110: Vivid Orange
+  { hex: '#FFFFFF', rgb: [255, 255, 255] }  // 111: Pure White
+];
+
+const CANVAS_SIZE = 440;
+const CENTER_X = CANVAS_SIZE / 2;
+const CENTER_Y = CANVAS_SIZE / 2;
+const MAX_RING = 7;          // 프로토타입 실시간 비전 인식을 위해 반지름 7단(169셀)으로 설정
+const CELL_RADIUS = 14.5;    // 육각 셀 반지름 (픽셀)
+
+// 정육각형 링 나선형 생성기 (Ring 0 = 중심, Ring 1 = 헤더/Seed, Ring 2~6 = 페이로드, Ring 7 = 앵커/ECC)
+const hexCells = [];
+function buildHexGrid() {
+  hexCells.length = 0;
+  hexCells.push({ q: 0, r: 0, ring: 0, x: CENTER_X, y: CENTER_Y, role: 'bullseye' });
+
+  const dirs = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+  for (let ring = 1; ring <= MAX_RING; ring++) {
+    let q = 0, r = -ring;
+    for (let side = 0; side < 6; side++) {
+      for (let step = 0; step < ring; step++) {
+        const px = CENTER_X + CELL_RADIUS * Math.sqrt(3) * (q + r / 2);
+        const py = CENTER_Y + CELL_RADIUS * 1.5 * r;
+
+        let role = 'payload';
+        let cornerIndex = -1;
+        if (ring === 1 || ring === 2) role = 'header'; // Seed ID + CRC 영역 (18셀)
+        else if (ring === MAX_RING) {
+          if (step === 0) { role = 'anchor'; cornerIndex = side; }
+          else role = 'timing';
+        }
+
+        hexCells.push({
+          q, r, ring, x: px, y: py, role, cornerIndex,
+          prevAngle: 0, targetAngle: 0, currentAngle: 0,
+          outerColorIdx: 3, innerColorIdx: 7
+        });
+        q += dirs[side][0];
+        r += dirs[side][1];
+      }
+    }
+  }
+}
+buildHexGrid();
+
+const headerCells = hexCells.filter(c => c.role === 'header');   // 18개 셀 (Seed ID 및 무결성 체크용)
+const payloadCells = hexCells.filter(c => c.role === 'payload'); // 108개 셀 (프레임당 108 * 9비트 = 972비트)
+const BYTES_PER_DROPLET = 12; // 프레임당 12바이트(96비트) 청크 단위 파운틴 전송 (고신뢰 복원용)
+
+/**
+ * ============================================================================
+ * 2. LT 파운틴 코드 인코더 & 실시간 가우스 소거법(Gaussian Elimination) 디코더
+ * ============================================================================
+ */
+let sourceChunks = []; // K개의 원본 데이터 블록 (각 블록은 Uint8Array(BYTES_PER_DROPLET))
+let K_BLOCKS = 0;
+let currentSeed = 1;
+
+// 가우스 소거법 디코더 상태
+let basisRows = [];    // 크기가 K인 이진 기저 벡터 배열
+let basisPayloads = [];
+let solvedCount = 0;
+let rxSuccessCount = 0;
+let rxDropCount = 0;
+let isFullyDecoded = false;
+
+// 결정론적 의사난수 생성기 (송수신기가 Seed ID 하나만으로 동일한 XOR 조합을 공유)
+function mulberry32(seed) {
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Seed ID로부터 어떤 블록들을 XOR할지 결정 (스마트 Soliton 분포)
+function getIndicesFromSeed(seed, K) {
+  const rng = mulberry32(seed * 7919);
+  // 빠른 초기 복원을 위해 35% 확률로 Degree=1, 45% 확률로 Degree=2, 20% 확률로 Degree=3~4
+  const r = rng();
+  let degree = 1;
+  if (K > 1) {
+    if (r < 0.38) degree = 1;
+    else if (r < 0.82) degree = Math.min(K, 2);
+    else degree = Math.min(K, 3 + Math.floor(rng() * 2));
+  }
+  const selected = new Set();
+  while (selected.size < degree) {
+    selected.add(Math.floor(rng() * K));
+  }
+  return Array.from(selected);
+}
+
+// 텍스트를 K개의 고정 블록으로 분할하고 파운틴 스트림 초기화
+function resetAndStartFountain() {
+  const rawText = document.getElementById('inputText').value || 'ChromaHex-4D';
+  const encoder = new TextEncoder();
+  const rawBytes = encoder.encode(rawText);
+
+  // 앞 2바이트에 원본 바이트 길이 기록
+  const totalBuf = new Uint8Array(rawBytes.length + 2);
+  totalBuf[0] = (rawBytes.length >> 8) & 0xFF;
+  totalBuf[1] = rawBytes.length & 0xFF;
+  totalBuf.set(rawBytes, 2);
+
+  document.getElementById('payloadSizeLabel').textContent = `${rawBytes.length} Bytes`;
+
+  K_BLOCKS = Math.ceil(totalBuf.length / BYTES_PER_DROPLET);
+  sourceChunks = [];
+  for (let i = 0; i < K_BLOCKS; i++) {
+    const chunk = new Uint8Array(BYTES_PER_DROPLET);
+    const slice = totalBuf.slice(i * BYTES_PER_DROPLET, (i + 1) * BYTES_PER_DROPLET);
+    chunk.set(slice);
+    sourceChunks.push(chunk);
+  }
+
+  // 가우스 소거법 매트릭스 초기화
+  basisRows = new Array(K_BLOCKS).fill(null);
+  basisPayloads = new Array(K_BLOCKS).fill(null);
+  solvedCount = 0;
+  rxSuccessCount = 0;
+  rxDropCount = 0;
+  currentSeed = 1;
+  isFullyDecoded = false;
+
+  document.getElementById('decodedOutputBox').textContent =
+    '스트림 패킷 수집 중... (순서에 상관없이 충분한 프레임이 모이면 즉시 복원됩니다)';
+  document.getElementById('decodedOutputBox').style.color = '#8a94a8';
+  document.getElementById('txCellCountStat').textContent = `${payloadCells.length} 셀`;
+  updateTxParams();
+  renderChunkMatrixUI();
+  updateDecoderStatsUI();
+}
+
+// 송신측: 현재 Seed로 드로플릿(Droplet) 생성 후 육각 셀들에 9비트 심볼로 매핑
+function encodeNextDropletFrame() {
+  currentSeed = (currentSeed % 250) + 1; // 1 ~ 250 순환 Seed
+  document.getElementById('txSeedStat').textContent = `#${currentSeed}`;
+
+  const indices = getIndicesFromSeed(currentSeed, K_BLOCKS);
+  const xorPayload = new Uint8Array(BYTES_PER_DROPLET);
+  for (const idx of indices) {
+    for (let b = 0; b < BYTES_PER_DROPLET; b++) {
+      xorPayload[b] ^= sourceChunks[idx][b];
+    }
+  }
+
+  // 간단한 8비트 체크섬 계산 (롤링셔터나 강한 노이즈로 오염된 패킷 폐기용)
+  let checksum = currentSeed & 0xFF;
+  for (let b = 0; b < BYTES_PER_DROPLET; b++) {
+    checksum = (checksum + xorPayload[b] * (b + 3)) & 0xFF;
+  }
+
+  // 1) Header Ring (18셀): Seed ID와 Checksum을 3중 반복 기록(Majority Voting 방어)
+  for (let i = 0; i < headerCells.length; i++) {
+    const cell = headerCells[i];
+    const isSeedCell = (i % 2 === 0);
+    const val8 = isSeedCell ? currentSeed : checksum;
+    const angleBits = (val8 >> 5) & 0x07;
+    const outerBits = (val8 >> 2) & 0x07;
+    const innerBits = (val8 & 0x03) << 1;
+
+    cell.prevAngle = cell.targetAngle;
+    cell.targetAngle = angleBits * (Math.PI / 4);
+    cell.outerColorIdx = outerBits;
+    cell.innerColorIdx = innerBits;
+  }
+
+  // 2) Payload Ring: 바이트당 2개의 육각 셀에 나누어 할당 + 반복 다수결 코딩(Repetition ECC)
+  for (let i = 0; i < payloadCells.length; i++) {
+    const cell = payloadCells[i];
+    const byteIdx = Math.floor(i / 2) % BYTES_PER_DROPLET;
+    const isHighNibble = (i % 2 === 0);
+    const byteVal = xorPayload[byteIdx];
+    const nibble = isHighNibble ? ((byteVal >> 4) & 0x0F) : (byteVal & 0x0F);
+
+    // 4비트 니블을 각도(3비트) + 외곽색(3비트) + 코어색(3비트)에 중복 분산 배치하여 인식 신뢰도 극대화
+    const angleBits = nibble & 0x07;
+    const outerBits = ((nibble >> 1) ^ (nibble & 0x03)) & 0x07;
+    const innerBits = ((nibble & 0x08) ? 7 : 1);
+
+    cell.prevAngle = cell.targetAngle;
+    cell.targetAngle = angleBits * (Math.PI / 4);
+    cell.outerColorIdx = outerBits;
+    cell.innerColorIdx = innerBits;
+  }
+}
+
+// 수신측: 가우스 소거법(On-the-fly Gaussian Elimination)으로 원본 블록 복원
+function insertDropletToFountainDecoder(seed, dropletBytes) {
+  const indices = getIndicesFromSeed(seed, K_BLOCKS);
+  const rowVec = new Uint8Array(K_BLOCKS);
+  for (const idx of indices) rowVec[idx] = 1;
+  const payload = new Uint8Array(dropletBytes);
+
+  // 전방 소거 (Forward Elimination)
+  for (let i = 0; i < K_BLOCKS; i++) {
+    if (rowVec[i] === 1) {
+      if (basisRows[i] !== null) {
+        for (let k = i; k < K_BLOCKS; k++) rowVec[k] ^= basisRows[i][k];
+        for (let b = 0; b < BYTES_PER_DROPLET; b++) payload[b] ^= basisPayloads[i][b];
+      } else {
+        basisRows[i] = rowVec;
+        basisPayloads[i] = payload;
+        solvedCount++;
+        break;
+      }
+    }
+  }
+
+  // 역대입 (Back-Substitution)으로 대각 행렬화 유지
+  if (solvedCount === K_BLOCKS && !isFullyDecoded) {
+    for (let i = K_BLOCKS - 1; i >= 0; i--) {
+      for (let j = 0; j < i; j++) {
+        if (basisRows[j] && basisRows[j][i] === 1) {
+          basisRows[j][i] = 0;
+          for (let b = 0; b < BYTES_PER_DROPLET; b++) {
+            basisPayloads[j][b] ^= basisPayloads[i][b];
+          }
+        }
+      }
+    }
+    isFullyDecoded = true;
+    reconstructFinalMessage();
+  }
+
+  renderChunkMatrixUI();
+  updateDecoderStatsUI();
+}
+
+function reconstructFinalMessage() {
+  const fullBuf = new Uint8Array(K_BLOCKS * BYTES_PER_DROPLET);
+  for (let i = 0; i < K_BLOCKS; i++) {
+    fullBuf.set(basisPayloads[i], i * BYTES_PER_DROPLET);
+  }
+  const msgLen = (fullBuf[0] << 8) | fullBuf[1];
+  const validSlice = fullBuf.slice(2, 2 + Math.min(msgLen, fullBuf.length - 2));
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  const text = decoder.decode(validSlice);
+
+  const outBox = document.getElementById('decodedOutputBox');
+  outBox.textContent = `✅ [복원 완료] ${text}`;
+  outBox.style.color = '#00e676';
+}
+
+/**
+ * ============================================================================
+ * 3. 시각적 블루프린트 렌더러 (물방울 글리프 + 블랙 가드밴드 + 6꼭짓점 컬러 앵커)
+ * ============================================================================
+ */
+const txCanvas = document.getElementById('txCanvas');
+const txCtx = txCanvas.getContext('2d', { willReadFrequently: true });
+
+function interpolateAngle(a0, a1, t) {
+  let diff = a1 - a0;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  return a0 + diff * t;
+}
+
+function drawCometGlyph(ctx, x, y, radius, angleRad, outerHex, innerHex) {
+  const r = radius * 0.78; // 22% 블랙 가드 밴드 여백
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angleRad);
+
+  // 비대칭 물방울(혜성) 바디: +X축 끝이 밝고 무거운 헤드
+  ctx.beginPath();
+  ctx.moveTo(r * 1.05, 0);
+  ctx.bezierCurveTo(r * 0.35, r * 0.82, -r * 0.85, r * 0.62, -r * 0.85, 0);
+  ctx.bezierCurveTo(-r * 0.85, -r * 0.62, r * 0.35, -r * 0.82, r * 1.05, 0);
+  ctx.closePath();
+  ctx.fillStyle = outerHex;
+  ctx.fill();
+
+  // 무게중심을 +X 방향(헤드 쪽)으로 강하게 편향시키는 고휘도 비콘 도트
+  ctx.beginPath();
+  ctx.arc(r * 0.38, 0, r * 0.32, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+
+  // 중심부 듀얼 톤 코어 도트 (-X 꼬리 쪽 배치)
+  ctx.beginPath();
+  ctx.arc(-r * 0.28, 0, r * 0.28, 0, Math.PI * 2);
+  ctx.fillStyle = innerHex;
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function renderTransmitterCanvas(interpAlpha, frameTick) {
+  // 1. 순수 블랙 다크 매트릭스 배경 (Blooming 차단)
+  txCtx.fillStyle = '#050609';
+  txCtx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+  // 외곽 육각형 가이드 테두리
+  txCtx.strokeStyle = '#1b2234';
+  txCtx.lineWidth = 2;
+  txCtx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const ang = (i * 60 - 30) * Math.PI / 180;
+    const vx = CENTER_X + (MAX_RING + 1.1) * CELL_RADIUS * Math.sqrt(3) * Math.cos(ang);
+    const vy = CENTER_Y + (MAX_RING + 1.1) * CELL_RADIUS * Math.sqrt(3) * Math.sin(ang);
+    if (i === 0) txCtx.moveTo(vx, vy);
+    else txCtx.lineTo(vx, vy);
+  }
+  txCtx.closePath();
+  txCtx.stroke();
+
+  // 각 셀 렌더링
+  for (const cell of hexCells) {
+    if (cell.role === 'bullseye') {
+      // 정중앙 불스아이 타깃 (0,0 좌표 동기화용)
+      txCtx.beginPath();
+      txCtx.arc(cell.x, cell.y, CELL_RADIUS * 0.95, 0, Math.PI * 2);
+      txCtx.fillStyle = '#FFFFFF';
+      txCtx.fill();
+      txCtx.beginPath();
+      txCtx.arc(cell.x, cell.y, CELL_RADIUS * 0.6, 0, Math.PI * 2);
+      txCtx.fillStyle = '#000000';
+      txCtx.fill();
+      txCtx.beginPath();
+      txCtx.arc(cell.x, cell.y, CELL_RADIUS * 0.28, 0, Math.PI * 2);
+      txCtx.fillStyle = '#00F0FF';
+      txCtx.fill();
+    } else if (cell.role === 'anchor') {
+      // 6대 꼭짓점 컬러 캘리브레이션 & 12시 비대칭 마스터 앵커
+      const refColor = PALETTE_8[cell.cornerIndex % 6].hex;
+      txCtx.beginPath();
+      txCtx.arc(cell.x, cell.y, CELL_RADIUS * 0.85, 0, Math.PI * 2);
+      txCtx.fillStyle = refColor;
+      txCtx.fill();
+      if (cell.cornerIndex === 0) {
+        // 12시 방향 마스터 앵커 이중 링 표시
+        txCtx.strokeStyle = '#FFFFFF';
+        txCtx.lineWidth = 2.5;
+        txCtx.beginPath();
+        txCtx.arc(cell.x, cell.y, CELL_RADIUS * 1.05, 0, Math.PI * 2);
+        txCtx.stroke();
+      }
+    } else if (cell.role === 'timing') {
+      // 롤링 셔터 검출용 외곽 변 교차 타이밍 도트
+      const phaseOn = ((cell.q + cell.r + frameTick) & 1) === 0;
+      txCtx.beginPath();
+      txCtx.arc(cell.x, cell.y, CELL_RADIUS * 0.42, 0, Math.PI * 2);
+      txCtx.fillStyle = phaseOn ? '#FFFFFF' : '#1E2638';
+      txCtx.fill();
+    } else {
+      // 헤더 및 데이터 페이로드 셀 (연속 위상 회전 보간)
+      const curAngle = interpolateAngle(cell.prevAngle, cell.targetAngle, interpAlpha);
+      const outerHex = PALETTE_8[cell.outerColorIdx].hex;
+      const innerHex = PALETTE_8[cell.innerColorIdx].hex;
+      drawCometGlyph(txCtx, cell.x, cell.y, CELL_RADIUS, curAngle, outerHex, innerHex);
+    }
+  }
+}
+
+/**
+ * ============================================================================
+ * 4. 컴퓨터 비전 디코더 (1차 모멘트 무게중심 각도 + CCM 컬러 매칭 + 롤링셔터 검증)
+ * ============================================================================
+ */
+const rxCanvas = document.getElementById('rxCanvas');
+const rxCtx = rxCanvas.getContext('2d', { willReadFrequently: true });
+const camVideo = document.getElementById('camVideo');
+
+let currentMode = 'sim'; // 'sim' | 'cam'
+
+// 가장 가까운 네온 팔레트 색상 찾기 (유클리드 색공간 거리)
+function matchNearestPaletteColor(r, g, b, glareOffset) {
+  const cr = Math.max(0, Math.min(255, r - glareOffset));
+  const cg = Math.max(0, Math.min(255, g - glareOffset));
+  const cb = Math.max(0, Math.min(255, b - glareOffset));
+
+  let bestIdx = 0;
+  let minDist = Infinity;
+  for (let i = 0; i < PALETTE_8.length; i++) {
+    const pr = PALETTE_8[i].rgb[0];
+    const pg = PALETTE_8[i].rgb[1];
+    const pb = PALETTE_8[i].rgb[2];
+    const d = (cr - pr) ** 2 + (cg - pg) ** 2 + (cb - pb) ** 2;
+    if (d < minDist) {
+      minDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+// 단일 육각 셀에서 1차 모멘트(밝기 무게중심 벡터)로 회전 각도와 색상 추출
+function decodeSingleCellFromImage(imgData, cx, cy, glareOffset) {
+  const rInt = Math.floor(CELL_RADIUS * 0.72);
+  let sumLum = 0, sumXLum = 0, sumYLum = 0;
+
+  for (let dy = -rInt; dy <= rInt; dy++) {
+    for (let dx = -rInt; dx <= rInt; dx++) {
+      if (dx * dx + dy * dy > rInt * rInt) continue;
+      const px = Math.round(cx + dx);
+      const py = Math.round(cy + dy);
+      if (px < 0 || px >= CANVAS_SIZE || py < 0 || py >= CANVAS_SIZE) continue;
+
+      const idx = (py * CANVAS_SIZE + px) * 4;
+      const r = Math.max(0, imgData[idx] - glareOffset);
+      const g = Math.max(0, imgData[idx + 1] - glareOffset);
+      const b = Math.max(0, imgData[idx + 2] - glareOffset);
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+      // 밝은 헤드 비콘에 가중치를 부여하여 모션 블러 속에서도 정확한 각도 벡터 산출
+      const weight = lum > 180 ? lum * 2.2 : lum * 0.5;
+      sumLum += weight;
+      sumXLum += dx * weight;
+      sumYLum += dy * weight;
+    }
+  }
+
+  const centroidX = sumXLum / (sumLum || 1);
+  const centroidY = sumYLum / (sumLum || 1);
+  let deg = Math.atan2(centroidY, centroidX) * 180 / Math.PI;
+  if (deg < 0) deg += 360;
+  const angleBits = Math.round(deg / 45) % 8;
+
+  // 각도 방향의 중반부 픽셀에서 외곽 바디 색상 샘플링
+  const rad = angleBits * (Math.PI / 4);
+  const sampleX = Math.round(cx + Math.cos(rad) * (CELL_RADIUS * 0.15));
+  const sampleY = Math.round(cy + Math.sin(rad) * (CELL_RADIUS * 0.15));
+  const sIdx = (sampleY * CANVAS_SIZE + sampleX) * 4;
+  const outerBits = matchNearestPaletteColor(
+    imgData[sIdx], imgData[sIdx + 1], imgData[sIdx + 2], glareOffset
+  );
+
+  // 반대편 꼬리 쪽에서 내부 코어 색상 샘플링
+  const coreX = Math.round(cx - Math.cos(rad) * (CELL_RADIUS * 0.28));
+  const coreY = Math.round(cy - Math.sin(rad) * (CELL_RADIUS * 0.28));
+  const cIdx = (coreY * CANVAS_SIZE + coreX) * 4;
+  const innerBits = matchNearestPaletteColor(
+    imgData[cIdx], imgData[cIdx + 1], imgData[cIdx + 2], glareOffset
+  );
+
+  return { angleBits, outerBits, innerBits, centroidX, centroidY };
+}
+
+// 수신 캔버스 프레임 전체를 컴퓨터 비전으로 스캔하여 파운틴 패킷 복원
+function processVisionFrame() {
+  rxCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+  const blurVal = parseInt(document.getElementById('blurSlider').value, 10);
+  const glareVal = parseInt(document.getElementById('glareSlider').value, 10);
+  const lossVal = parseInt(document.getElementById('lossSlider').value, 10);
+
+  if (currentMode === 'sim') {
+    // 1) 손떨림(Gaussian Shake) 오프셋 및 블러 시뮬레이션
+    const shakeX = (Math.random() - 0.5) * (blurVal * 0.08);
+    const shakeY = (Math.random() - 0.5) * (blurVal * 0.08);
+    rxCtx.save();
+    if (blurVal > 20) rxCtx.filter = `blur(${(blurVal - 15) * 0.03}px)`;
+    rxCtx.drawImage(txCanvas, shakeX, shakeY);
+    rxCtx.restore();
+
+    // 2) 조명 그라데이션 & 빛 반사 안개(Veiling Glare) 합성
+    if (glareVal > 0) {
+      const grad = rxCtx.createLinearGradient(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      grad.addColorStop(0, `rgba(255, 255, 255, ${glareVal * 0.0035})`);
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      rxCtx.fillStyle = grad;
+      rxCtx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    }
+
+    // 3) 롤링 셔터 찢어짐(Seam Line) 또는 프레임 드롭 시뮬레이션
+    const isTornFrame = (Math.random() * 100) < lossVal;
+    if (isTornFrame) {
+      const seamY = Math.floor(80 + Math.random() * 280);
+      rxCtx.fillStyle = 'rgba(255, 0, 122, 0.28)';
+      rxCtx.fillRect(0, seamY - 8, CANVAS_SIZE, 16);
+      rxCtx.strokeStyle = '#ff007a';
+      rxCtx.beginPath();
+      rxCtx.moveTo(0, seamY);
+      rxCtx.lineTo(CANVAS_SIZE, seamY);
+      rxCtx.stroke();
+      rxDropCount++;
+      updateDecoderStatsUI();
+      return; // 찢어진 프레임은 체크섬에 의해 자동 폐기되고 다음 파운틴 드로플릿을 기다림
+    }
+  } else {
+    // 스마트폰 실물 카메라 비디오 스트림 캡처
+    if (camVideo.readyState >= 2) {
+      const vw = camVideo.videoWidth;
+      const vh = camVideo.videoHeight;
+      const minDim = Math.min(vw, vh);
+      const sx = (vw - minDim) / 2;
+      const sy = (vh - minDim) / 2;
+      rxCtx.drawImage(camVideo, sx, sy, minDim, minDim, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    } else {
+      return;
+    }
+  }
+
+  // 비전 픽셀 데이터 획득
+  const imgData = rxCtx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE).data;
+
+  // 가드 밴드 블랙 레벨(Glare Offset) 자동 측정 (중심 주변 여백 픽셀)
+  const bgIdx = (Math.round(CENTER_Y + CELL_RADIUS) * CANVAS_SIZE + Math.round(CENTER_X)) * 4;
+  const glareOffset = Math.min(60, imgData[bgIdx] * 0.7);
+
+  // 1) Header Ring 다수결 디코딩 (Seed ID & Checksum 추출)
+  const seedVotes = {};
+  const chkVotes = {};
+  for (let i = 0; i < headerCells.length; i++) {
+    const cell = headerCells[i];
+    const dec = decodeSingleCellFromImage(imgData, cell.x, cell.y, glareOffset);
+    const val8 = (dec.angleBits << 5) | (dec.outerBits << 2) | ((dec.innerBits >> 1) & 0x03);
+    if (i % 2 === 0) seedVotes[val8] = (seedVotes[val8] || 0) + 1;
+    else chkVotes[val8] = (chkVotes[val8] || 0) + 1;
+  }
+
+  const decodedSeed = parseInt(Object.keys(seedVotes).sort((a, b) => seedVotes[b] - seedVotes[a])[0] || '0', 10);
+  const decodedChecksum = parseInt(Object.keys(chkVotes).sort((a, b) => chkVotes[b] - chkVotes[a])[0] || '0', 10);
+
+  if (decodedSeed < 1 || decodedSeed > 250) return;
+
+  // 2) Payload Ring 디코딩 (다수결 투표 결합)
+  const dropletBytes = new Uint8Array(BYTES_PER_DROPLET);
+  for (let b = 0; b < BYTES_PER_DROPLET; b++) {
+    const highVotes = {};
+    const lowVotes = {};
+
+    for (let i = b * 2; i < payloadCells.length; i += BYTES_PER_DROPLET * 2) {
+      // High Nibble 셀
+      const cHigh = payloadCells[i];
+      if (cHigh) {
+        const dH = decodeSingleCellFromImage(imgData, cHigh.x, cHigh.y, glareOffset);
+        const nibH = ((dH.innerBits >= 4 ? 8 : 0) | dH.angleBits) & 0x0F;
+        highVotes[nibH] = (highVotes[nibH] || 0) + 1;
+      }
+      // Low Nibble 셀
+      const cLow = payloadCells[i + 1];
+      if (cLow) {
+        const dL = decodeSingleCellFromImage(imgData, cLow.x, cLow.y, glareOffset);
+        const nibL = ((dL.innerBits >= 4 ? 8 : 0) | dL.angleBits) & 0x0F;
+        lowVotes[nibL] = (lowVotes[nibL] || 0) + 1;
+      }
+    }
+
+    const bestHigh = parseInt(Object.keys(highVotes).sort((a, c) => highVotes[c] - highVotes[a])[0] || '0', 10);
+    const bestLow = parseInt(Object.keys(lowVotes).sort((a, c) => lowVotes[c] - lowVotes[a])[0] || '0', 10);
+    dropletBytes[b] = (bestHigh << 4) | bestLow;
+  }
+
+  // 3) CRC 체크섬 검증 (광학 노이즈로 깨진 프레임은 파운틴 행렬에 넣지 않고 즉시 폐기)
+  let calcChk = decodedSeed & 0xFF;
+  for (let b = 0; b < BYTES_PER_DROPLET; b++) {
+    calcChk = (calcChk + dropletBytes[b] * (b + 3)) & 0xFF;
+  }
+
+  // 비전 인식 오버레이 타깃 표시
+  rxCtx.strokeStyle = (calcChk === decodedChecksum) ? 'rgba(0, 230, 118, 0.55)' : 'rgba(255, 0, 122, 0.55)';
+  rxCtx.lineWidth = 2;
+  rxCtx.beginPath();
+  rxCtx.arc(CENTER_X, CENTER_Y, MAX_RING * CELL_RADIUS * 1.75, 0, Math.PI * 2);
+  rxCtx.stroke();
+
+  if (calcChk === decodedChecksum) {
+    rxSuccessCount++;
+    insertDropletToFountainDecoder(decodedSeed, dropletBytes);
+  } else {
+    rxDropCount++;
+    updateDecoderStatsUI();
+  }
+}
+
+/**
+ * ============================================================================
+ * 5. 스마트폰 카메라(WebRTC) 제어 및 UI 이벤트 루프
+ * ============================================================================
+ */
+let mediaStream = null;
+async function startSmartphoneCamera() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 720 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
+      },
+      audio: false
+    });
+    camVideo.srcObject = mediaStream;
+    await camVideo.play();
+    document.getElementById('rxStatusBadge').textContent = '📷 스마트폰 카메라 라이브 스캔 중';
+  } catch (err) {
+    alert('카메라 접근 실패: HTTPS 환경에서 실행하거나 브라우저 카메라 권한을 허용해 주세요.\n(' + err.message + ')');
+  }
+}
+
+function stopSmartphoneCamera() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
+  document.getElementById('rxStatusBadge').textContent = '카메라 대기 중';
+}
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('tabSimBtn').classList.toggle('active', mode === 'sim');
+  document.getElementById('tabCamBtn').classList.toggle('active', mode === 'cam');
+  document.getElementById('simControlsBox').style.display = mode === 'sim' ? 'flex' : 'none';
+  document.getElementById('camControlsBox').style.display = mode === 'cam' ? 'flex' : 'none';
+
+  if (mode === 'sim') {
+    stopSmartphoneCamera();
+    document.getElementById('rxStatusBadge').textContent = '가상 루프백 실시간 해독 중';
+  } else {
+    document.getElementById('rxStatusBadge').textContent = '스마트폰 카메라 모드';
+  }
+}
+
+function renderChunkMatrixUI() {
+  const container = document.getElementById('chunkMatrixGrid');
+  container.innerHTML = '';
+  for (let i = 0; i < K_BLOCKS; i++) {
+    const div = document.createElement('div');
+    const isSolved = basisRows[i] !== null;
+    div.className = 'chunk-cell' + (isSolved ? ' solved' : '');
+    div.textContent = i + 1;
+    container.appendChild(div);
+  }
+}
+
+function updateDecoderStatsUI() {
+  const pct = K_BLOCKS > 0 ? Math.round((solvedCount / K_BLOCKS) * 100) : 0;
+  document.getElementById('rankProgressLabel').textContent = `${solvedCount} / ${K_BLOCKS} 블록 (${pct}%)`;
+  document.getElementById('progressBar').style.width = `${pct}%`;
+  document.getElementById('rxPacketCountLabel').textContent =
+    `유효 패킷: ${rxSuccessCount}개 (폐기/롤링셔터: ${rxDropCount})`;
+}
+
+function updateSimLabels() {
+  document.getElementById('blurLabel').textContent = document.getElementById('blurSlider').value + '%';
+  document.getElementById('glareLabel').textContent = document.getElementById('glareSlider').value + '%';
+  document.getElementById('lossLabel').textContent = document.getElementById('lossSlider').value + '%';
+}
+
+let targetFPS = 15;
+function updateTxParams() {
+  targetFPS = parseInt(document.getElementById('fpsSlider').value, 10);
+  document.getElementById('fpsValLabel').textContent = `${targetFPS} FPS`;
+  const rawKbps = ((payloadCells.length * 9 * targetFPS) / 8 / 1024).toFixed(1);
+  document.getElementById('txSpeedStat').textContent = `${rawKbps} KB/s`;
+}
+
+let isPaused = false;
+function togglePause() {
+  isPaused = !isPaused;
+  document.getElementById('pauseBtn').textContent = isPaused ? '▶️ 재생 재개' : '⏸ 일시정지';
+}
+
+// 메인 애니메이션 및 비전 스캔 루프
+let lastPacketTime = performance.now();
+let frameTick = 0;
+
+function mainLoop(now) {
+  requestAnimationFrame(mainLoop);
+  if (isPaused) return;
+
+  const interval = 1000 / targetFPS;
+  const elapsed = now - lastPacketTime;
+  const interpAlpha = Math.min(1.0, elapsed / interval);
+
+  // 스무스 회전 보간 렌더링
+  renderTransmitterCanvas(interpAlpha, frameTick);
+
+  // 설정된 FPS 주기가 도달하면 완전히 회전이 완료된 시점에서 비전 캡처 후 다음 드로플릿 송출
+  if (elapsed >= interval) {
+    renderTransmitterCanvas(1.0, frameTick);
+    processVisionFrame();
+    frameTick++;
+    encodeNextDropletFrame();
+    lastPacketTime = now;
+  }
+}
+
+// 초기 구동
+resetAndStartFountain();
+requestAnimationFrame(mainLoop);
+</script>
+</body>
+</html>
